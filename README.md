@@ -1,209 +1,155 @@
-<div align="center">
+# CN Metadata Exporter
 
-# Blue Archive Asset Downloader 
+`cn_metadata_exporter` is the C# exporter for the protected CN metadata format used in this workspace.
 
-本项目可以从不同服务器下载并提取碧蓝档案的素材，现支援中国服、国际服、日本服。
-</div>
+It is intentionally structured as a standalone tool:
 
+- `Cpp2IL` is referenced as a clean dependency
+- CN-specific restore and parsing logic live here
+- the tool accepts either raw protected `global-metadata.dat` or an already restored metadata buffer
 
-## 主要功能
+## Purpose
 
-- **多服务器支持**：可从中国(蔚蓝档案)、国际(Blue Archive)、日本(ブルーアーカイブ)三个服务器下载素材。
-<!-- - **资源解开**：在日本服务器中包含几乎完整的支持。 -->
-<!-- - **CN 阶段成果**：当前 `download --region cn`、`sync --region cn`、`relation build --region cn` 已可用；`--advanced-search` 仍未开放。 -->
-<!-- - **JP 阶段成果**：当前 `download --region jp`、`sync --region jp`、`relation build --region jp` 已可用；`--advanced-search` 仍未开放。 -->
+The exporter performs explicit phases:
 
+1. Detect protected metadata
+2. Restore it into a parseable metadata buffer
+3. Parse the CN custom metadata layout
+4. Build resolved export artifacts
+5. Emit a reference-style `dump.cs` text description
 
-## 资源类型
+Semantic recovery currently includes:
 
-下载的文件类型包括：
+- readable modifiers
+- optional private-member filtering by category
+- optional reference-style method address placeholder comments
+- common BCL and Unity type names
+- backing-field to property linkage
+- metadata-driven nested/interface/vtable section parsing
+- interface and inheritance resolution
+- delegate, closure, and state-machine annotations
+- hotspot fixes for URL/root/path string arrays in business types
+- stage timing diagnostics for restore/parse/build/emit
 
-- Bundle
-- Media
-- Table
+## Project Layout
 
-<!-- 提取的文件类型包括：
-
-- Bundle(仅JP)
-- Media
-- Table(仅JP) -->
-
-#### **注意**：尽管部分区域支持下载不同版本的资源，但是该程序不保证能够提取过时版本的资源文件。
-
-## 环境要求
-
-- Windows/Linux
-- Python 3.10 或更高版本
-<!-- - [.NET8/.NET9 SDK](https://dotnet.microsoft.com/download)(提取table或使用高级检索时必须安装；新 dumper backend 优先使用 .NET9)  -->
-
-## 先决条件
-
-如果以源码方式运行，建议使用带 submodule 的 clone 流程：
-
-```shell
-git clone --recurse-submodules https://github.com/ZM-Kimu/Blue-Archive-Asset-Downloader
-cd Blue-Archive-Asset-Downloader
-uv sync
+```text
+cn_metadata_exporter/
+  Cli/
+    Program.cs
+    ExportOptions.cs
+    ExportProfiler.cs
+  Indexing/
+    TypeDescriptorIndex.cs
+    TypeDescriptorIndexBuilder.cs
+    TypeNameLookup.cs
+    YldaTypeIndexBuilder.cs
+    YldaRelationshipIndexBuilder.cs
+    YldaMemberIndexBuilder.cs
+    ResolvedExportArtifactBuilder.cs
+  Exporting/
+    YldaDumpExporter.cs
+    YldaDumpExporter.Writers.cs
+  Metadata/
+    YldaMetadataLayout.cs
+    YldaMetadataReader.cs
+    YldaMetadataRestorer.cs
+  Models/
+    Models.cs
+  Resolution/
+    YldaMemberResolver.cs
+    YldaRelationshipResolver.cs
+    YldaResolutionConstants.cs
+    YldaResolutionUtilities.cs
+    YldaTypeResolver.cs
+  README.md
+  cn_metadata_exporter.csproj
 ```
 
-- 若本地缺失 `third_party/Cpp2IL`，部分 dumper 流程会尝试自动下载源码。
+Responsibilities:
 
-请确保已安装 Python，并安装必要的库：
+- `Cli/`: process entry and argument parsing
+- `Metadata/`: protected-buffer restore and metadata layout decoding
+- `Indexing/`: one-time cold-path descriptor and artifact builders
+- `Resolution/`: type-name recovery, relationship resolution, and member-signature reconstruction
+- `Exporting/`: formatting-only `dump.cs` emission over resolved models
+- `Models/`: shared in-memory structures
 
-```shell
-uv sync
+## Build
+
+```powershell
+dotnet build cn_metadata_exporter\cn_metadata_exporter.csproj -c Release
 ```
 
-或者：
+## Run
 
-```shell
-pip install -e .
+```powershell
+dotnet run --project cn_metadata_exporter\cn_metadata_exporter.csproj -c Release -- `
+  --metadata "F:\cn_metadata\assets\bin\Data\Managed\Metadata\global-metadata.dat" `
+  --output "C:\Users\Win10\Desktop\test_ba\artifacts\exports\cn_dump_cs_from_csharp_full.cs" `
+  --profile
 ```
 
-## 使用说明
-命令结构如下：
+Persist the restored metadata buffer:
 
-```shell
-ba-downloader <subcommand> [options]
-python -m ba_downloader <subcommand> [options]
+```powershell
+dotnet run --project cn_metadata_exporter\cn_metadata_exporter.csproj -c Release -- `
+  --metadata "F:\cn_metadata\assets\bin\Data\Managed\Metadata\global-metadata.dat" `
+  --restored-output "C:\Users\Win10\Desktop\test_ba\artifacts\metadata\tmp_cn_restored_from_csharp.dat" `
+  --output "C:\Users\Win10\Desktop\test_ba\artifacts\exports\cn_dump_cs_from_csharp_full.cs"
 ```
 
-子命令：
+Show help:
 
-<!-- - `ba-downloader sync [options]`: 下载并解开全部内容 -->
-- `ba-downloader download [options]`: 下载全部内容
-<!-- - `ba-downloader extract [options]`: 解开已下载的内容 -->
-<!-- - `ba-downloader relation build [options]`: 构建角色信息表 -->
-
-使用下列命令运行完整下载与提取流程（示例）：
-
-```shell
-ba-downloader sync --region gl
+```powershell
+dotnet run --project cn_metadata_exporter\cn_metadata_exporter.csproj -c Release -- --help
 ```
 
-或者，使用以下命令仅下载资源而不进行提取（示例）：
+Export a subset:
 
-```shell
-ba-downloader download --region jp
+```powershell
+dotnet run --project cn_metadata_exporter\cn_metadata_exporter.csproj -c Release -- `
+  --metadata "F:\cn_metadata\assets\bin\Data\Managed\Metadata\global-metadata.dat" `
+  --image "BlueArchive.dll" `
+  --type-filter "ServerInfo" `
+  --private-members none
 ```
 
-也可以使用模块入口：
+Emit reference-shaped placeholder method addresses:
 
-```shell
-python -m ba_downloader sync --region jp
+```powershell
+dotnet run --project cn_metadata_exporter\cn_metadata_exporter.csproj -c Release -- `
+  --metadata "F:\cn_metadata\assets\bin\Data\Managed\Metadata\global-metadata.dat" `
+  --output "C:\Users\Win10\Desktop\test_ba\artifacts\exports\cn_dump_with_placeholders.cs" `
+  --method-address-placeholders
 ```
 
+## CLI Options
 
-## **基本参数**
-**`*`** :**必选的选项**
-| 参数                       | 缩&nbsp;写 | 说明                                                                           | 默认值             | 示例                          |
-| -------------------------- | ---------- | ------------------------------------------------------------------------------ | ------------------ | ----------------------------- |
-| **`--region`**`*`          | `-r`       | **服务器区域**：`cn`（中国）、`gl`（国际）、`jp`（日本）                       | 无                 | `-r jp`                       |
-| `--threads`                | `-t`       | **同时下载或解压的线程数**                                                     | `20`               | `-t 50`                       |
-| `--version`                | `-v`       | **需要下载的资源版本号**（仅 GL 生效）                                         | 无                 | `-v 1.2.3`                    |
-| `--platform`               | `-p`       | **资源所属平台**：`windows`、`android`、`ios`（仅 JP 生效）                    | `android`          | `-p windows`                  |
-| `--raw-dir`                | `-rd`      | **指定未处理文件的位置**                                                       | `"RawData"`        | `-rd raw_folder`              |
-| `--extract-dir`            | `-ed`      | **指定已提取文件的位置**                                                       | `"Extracted"`      | `-ed output_folder`           |
-| `--temp-dir`               | `-td`      | **指定临时文件的位置**                                                         | `"Temp"`           | `-td temp_dir`                |
-| `--extract-while-download` | `-ewd`     | **是否在下载时便提取文件**（仅 `sync` 可用；较慢，在资源数量较多时酌情使用）   | `False`            | `--extract-while-download`    |
-| `--resource-type`          | `-rt`      | **资源类型**：`table`、`media`、`bundle`、`all`                                | `all`              | `--resource-type media table` |
-| `--proxy`                  | `-px`      | **设置 HTTP 代理**                                                             | 无（使用系统代理） | `-px http://127.0.0.1:8080`   |
-| `--max-retries`            | `-mr`      | **下载失败时的最大重试次数**                                                   | `5`                | `--max-retries 3`             |
-| `--search`                 | `-s`       | **普通检索**，指定需要检索并下载的文件关键词（仅 `sync` 与 `download` 可用）   |
-| `--advanced-search`        | `-as`      | **高级检索**，指定角色关键词（仅 `sync` 可用；当前仅 GL 支持，需要 .NET 环境） |
+- `--metadata`
+- `--output`
+- `--image`
+- `--type-filter`
+- `--private-members`
+- `--method-address-placeholders`
+- `--restored-output`
+- `--key-constant`
+- `--profile`
 
-**(CN服务器目前不支持高级检索)高级检索支持的检索条件：**
-- `[*]` **角色名称**
-- `cv` **声优**
-- `age` **年龄**
-- `height` **身高**
-- `birthday` **生日**
-- `illustrator` **作画者**
-- `school` **所属学园**（包括但不限于）：
-  - `RedWinter`、`Trinity`、`Gehenna`、`Abydos`、`Millennium`、`Arius`
-  - `Shanhaijing`、`Valkyrie`、`WildHunt`、`SRT`、`SCHALE`、`ETC`
-  - `Tokiwadai`、`Sakugawa`
-- `club` **所属社团**（包括但不限于）：
-  - `Engineer`、`CleanNClearing`、`KnightsHospitaller`、`IndeGEHENNA`
-  - `IndeMILLENNIUM`、`IndeHyakkiyako`、`IndeShanhaijing`、`IndeTrinity`
-  - `FoodService`、`Countermeasure`、`BookClub`、`MatsuriOffice` ...
+## Design Notes
 
----
-#### 并且，在不同的服务器中亦支持不同的名称检索方式，具体内容请参照`<Region>CharacterRelation.json`。
-- 示例：
-  > sync
-  >```sh
-  >ba-downloader sync --region gl -as 貝雅特里榭 ยูเมะ ibuki
-  >```
+- This project prefers sample-derived recovery over cross-version reference assumptions.
+- Clean `Cpp2IL` is used as a dependency, not as the owner of CN-specific behavior.
+- The exporter is organized around explicit phases: restore, parse, build resolved artifact, emit.
+- The project intentionally avoids a persistent cache layer to keep the runtime path and maintenance model simple.
+- `--private-members` only controls members whose resolved accessibility is exactly `private`; it does not hide `internal`, `protected`, or `public` members.
+- `--method-address-placeholders` only affects method metadata comment formatting. It emits `RVA/Offset/VA` placeholders and does not imply real binary-derived addresses.
+- Raw custom metadata section knowledge stays in `Metadata/`; `Exporting/` should not reach into raw layout details.
+- The parser now builds a typed section inventory from `0x18..0xB8` and promotes high-value type-system sections into explicit models before resolution runs.
 
-  <!--
-  > japan
-  >```sh
-  >ba-downloader sync --region jp -as yume 百合園セイア 호시노 cv=小倉唯 height=153 birthday=2/19 illustrator=YutokaMizu school=Arius club=GameDev
-  >```
-  -->
+## Current Boundaries
 
-  > package name only
-  >```sh
-  >ba-downloader sync --region jp -s aris ch0070 shiroko
-  >```
-
-
-## 输出
-- `Temp`: 存储临时文件或非主要文件。如：Apk文件等。
-- `RawData`: 存储经由Catalog下载的文件。如：Bundle、Media、Table等。
-- `Extracted`: 存储已提取的文件。如：Bundle、Media、Table与Dumps等。
-<!-- - `CharacterRelation.json`: 角色信息，可通过 `ba-downloader relation build --region <region>` 生成。 -->
-
-JP 默认目录会按平台隔离：
-- **例：**`--platform android`: `JP_Android_RawData` / `JP_Android_Extracted` / `JP_Android_Temp`
-
-示例：
-
-```shell
-ba-downloader download --region jp --platform windows
-```
-
-
-## 使用须知
-- `--platform` 仅对 JP 生效，用于指定 JP 平台的资源：
-  - 同时影响 JP 默认输出目录前缀，例如 `JP_Windows_RawData`。
-- JP的APK文件来自于APKPure，在PlayStore已经更新后，APKPure可能需要一些时间来同步版本，后续开放官方 PC 版解析支持。
-- 当各服务器处于维护时间时，可能会无法获取资源目录。
-- 在某些地区可能需要使用代理服务器以下载特定服务器的游戏资源。
-- Bundle文件的提取基于UnityPy，如希望更加详细的内容请使用[AssetRipper](https://github.com/AssetRipper/AssetRipper)或[AssetStudio](https://github.com/Perfare/AssetStudio)
-<!-- - JP 当前支持 `download --region jp`、`sync --region jp`、`relation build --region jp`；JP `--advanced-search` 仍暂不可用。 -->
-
-## 维护说明
-开发、静态检查、dumper backend、子模块与发版流程请参阅 [docs/development.md](docs/development.md)。
-
-## TODO
-- `v2.0.1`
-  - 完善三服下载流程（CN / GL / JP）
-- `v2.0.2`
-  - 完善 JP 解开（需要密钥，而密钥位于服务器）
-  - 基于 `dump.cs` annotation tree 的 MemoryPack 
-  - CN metadata 解开
-- `v2.0.3`
-  - 新 Bundle 解开器
-  
-## 关于项目
-Blue Archive Asset Downloader v2.0.0.
-✨ 技术支持：Codex ✨
-
-本项目采用 [MIT 许可证](LICENSE)。
-
-部分内容参照自：
-- [Blue-Archive---Asset-Downloader](https://github.com/K0lb3/Blue-Archive---Asset-Downloader)
-- [Cpp2IL](https://github.com/SamboyCoding/Cpp2IL)
-
-## 免责声明 / Disclaimer
-该仓库仅供学习和展示用途，不托管任何实际资源。请注意，所有通过本项目下载的内容均应仅用于合法和正当的目的。开发者不对任何人因使用本项目而可能引发的直接或间接的损失、损害、法律责任或其他后果承担任何责任。用户在使用本项目时需自行承担风险，并确保遵守所有相关法律法规。如果有人使用本项目从事任何未经授权或非法的活动，开发者对此不承担任何责任。用户应对自身的行为负责，并了解使用本项目可能带来的任何风险。
-
-This project is intended solely for educational and demonstrative purposes and does not provide any actual resources. Please note that all content downloaded through this project should only be used for legal and legitimate purposes. The developers are not liable for any direct or indirect loss, damage, legal liability, or other consequences that may arise from the use of this project. Users assume all risks associated with the use of this project and must ensure compliance with all relevant laws and regulations. If anyone uses this project for any unauthorized or illegal activities, the developers bear no responsibility. Users are responsible for their own actions and should understand the risks involved in using this project.
-
-“蔚蓝档案”是上海星啸网络科技有限公司的注册商标，版权所有。
-
-「ブルーアーカイブ」は株式会社Yostarの登録商標です。著作権はすべて保有されています。
-
-"Blue Archive" is a registered trademark of NEXON Korea Corp. & NEXON GAMES Co., Ltd. All rights reserved.
+- Some private business types still fall back to `Type_0x...`
+- Complex generic signatures are only partially recovered
+- Some collection/delegate signatures still rely on resolver heuristics because binary-side type info is intentionally out of scope
+- The exporter targets analyst readability, not byte-identical `Il2CppDumper` output
